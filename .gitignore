@@ -45,3 +45,16 @@ next-env.d.ts
 *.gguf
 *.safetensors
 ~/.ollama/
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+# Compiled extensions
+*.so
+
+# Logs
+*.log
+
+# IDEs
+.vscode/
+.idea/
