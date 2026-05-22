@@ -1,47 +1,40 @@
 from fastapi import FastAPI, HTTPException
-import ollama as ollama_client
-from models import (
-    ChatRequest, ChatResponse,
-    VisionRequest, VisionResponse,
-    HealthResponse,
-)
+import groq_client
+from api_models import ChatRequest, ChatResponse, HealthResponse
 
-app = FastAPI(title="Digital Terrarium — Pi API", version="1.0.0")
+app = FastAPI(title="Digital Terrarium — Pi Worker API", version="2.0.0")
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    alive = await ollama_client.is_alive()
-    models = await ollama_client.list_models() if alive else []
+    reachable = await groq_client.is_reachable()
     return HealthResponse(
-        status="ok" if alive else "ollama_unreachable",
-        ollama=alive,
-        models_available=models,
+        status="ok" if reachable else "groq_unreachable",
+        groq_reachable=reachable,
     )
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
+    """
+    Unified chat endpoint. Routes to vision model automatically if image_url is set.
+    """
     try:
-        content = await ollama_client.chat(
-            model=req.model,
-            personality=req.personality,
-            messages=req.messages,
+        if req.image_url:
+            content, model_used = await groq_client.vision(
+                personality=req.personality,
+                messages=req.messages,
+                image_url=req.image_url,
+            )
+        else:
+            content, model_used = await groq_client.chat(
+                personality=req.personality,
+                messages=req.messages,
+            )
+        return ChatResponse(
+            content=content,
+            model=model_used,
+            agent_name=req.agent_name,
         )
-        return ChatResponse(content=content, model=req.model, agent_name=req.agent_name)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/vision", response_model=VisionResponse)
-async def vision(req: VisionRequest):
-    try:
-        content = await ollama_client.vision(
-            model=req.model,
-            personality=req.personality,
-            prompt=req.prompt,
-            image_url=req.image_url,
-        )
-        return VisionResponse(content=content, model=req.model, agent_name=req.agent_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
