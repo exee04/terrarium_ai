@@ -69,8 +69,8 @@ ACTIVE_TIMEOUT_SLOW   = 30   # seconds → switch active → active-slow
 ACTIVE_TIMEOUT_IDLE   = 120  # seconds → switch active-slow → idle
 
 # Sleep window (Pi rests, no turns)
-SLEEP_START_HOUR  = 23
-SLEEP_END_HOUR    = 8
+SLEEP_START_HOUR  = 3
+SLEEP_END_HOUR    = 6
 
 # Interest weight config
 WEIGHT_BASELINE           = 1.0
