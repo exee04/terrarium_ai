@@ -2,6 +2,7 @@
 import supabase from "@/lib/supabase";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { getAgents, resolveAvatar, type Agent } from "@/lib/agents"; // ← adjust path if needed
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -13,25 +14,33 @@ interface Entity {
   name: string;
   mood: Mood;
   status: Status;
+  avatar_url: string | null;
 }
 
 interface Message {
   id: string;
-  sender: string; // entity name or "you"
+  sender: string;
   text: string;
   timestamp: string;
   isSystem?: boolean;
   isHuman?: boolean;
 }
 
-// ── Static seed data ───────────────────────────────────────────────────────
+// ── Static moods (cycled by index so it's deterministic) ───────────────────
 
-const INITIAL_ENTITIES: Entity[] = [
-  { id: "vesper", name: "Vesper", mood: "contemplative", status: "processing" },
-  { id: "mire", name: "Mire", mood: "restless", status: "idle" },
-  { id: "chalk", name: "Chalk", mood: "curious", status: "idle" },
-  { id: "lorn", name: "Lorn", mood: "dormant", status: "dormant" },
-];
+const MOODS: Mood[] = ["contemplative", "restless", "curious", "guarded"];
+
+function agentToEntity(agent: Agent, index: number): Entity {
+  return {
+    id: agent.id,
+    name: agent.name,
+    mood: MOODS[index % MOODS.length],
+    status: "idle",
+    avatar_url: agent.avatar_url,
+  };
+}
+
+// ── Static seed messages ───────────────────────────────────────────────────
 
 const INITIAL_MESSAGES: Message[] = [
   {
@@ -152,27 +161,50 @@ function FeedMessage({ msg }: { msg: Message }) {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function HabitatPage() {
-  const [entities] = useState<Entity[]>(INITIAL_ENTITIES);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [selected, setSelected] = useState<string>("vesper");
+  const [selected, setSelected] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const feedRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState("");
-  // Auto-scroll to bottom whenever messages change
+
+  // ── Fetch real agents ──
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const { data, error } = await getAgents();
+      if (error || !data) {
+        setFetchError(error ?? "Unknown error");
+      } else {
+        const mapped = data.map(agentToEntity);
+        setEntities(mapped);
+        if (mapped.length > 0) setSelected(mapped[0].id);
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  // ── Auto-scroll ──
   useEffect(() => {
     if (feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // ── Clock ──
   useEffect(() => {
     setCurrentTime(now());
     const interval = setInterval(() => setCurrentTime(now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
   function transmit() {
     const text = input.trim();
     if (!text) return;
-
     setMessages((prev) => [
       ...prev,
       {
@@ -198,7 +230,6 @@ export default function HabitatPage() {
       className="flex h-screen w-full flex-col overflow-hidden bg-[#EEEFE0]"
       style={{ paddingTop: "var(--nav-height)" }}
     >
-      {/* Body */}
       <div className="flex min-h-0 flex-1">
         {/* ── Left Panel ── */}
         <aside className="flex w-52 flex-shrink-0 flex-col border-r border-[#D1D8BE]">
@@ -209,6 +240,21 @@ export default function HabitatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
+            {loading && (
+              <p className="px-4 py-3 font-mono text-[9px] text-[#A7C1A8]">
+                scanning habitat…
+              </p>
+            )}
+            {fetchError && (
+              <p className="px-4 py-3 font-mono text-[9px] text-red-400">
+                error: {fetchError}
+              </p>
+            )}
+            {!loading && !fetchError && entities.length === 0 && (
+              <p className="px-4 py-3 font-mono text-[9px] text-[#c5c9b8]">
+                no entities detected
+              </p>
+            )}
             {entities.map((e) => (
               <EntityCard
                 key={e.id}
@@ -228,7 +274,6 @@ export default function HabitatPage() {
 
         {/* ── Main Feed ── */}
         <main className="flex min-w-0 flex-1 flex-col">
-          {/* Feed header */}
           <div className="flex flex-shrink-0 items-center justify-between border-b border-[#D1D8BE] px-5 py-3">
             <p className="font-mono text-[9px] tracking-[0.2em] text-[#819A91] uppercase">
               Habitat — observation feed
@@ -239,7 +284,6 @@ export default function HabitatPage() {
             </div>
           </div>
 
-          {/* Scrollable messages */}
           <div
             ref={feedRef}
             className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
@@ -249,7 +293,6 @@ export default function HabitatPage() {
             ))}
           </div>
 
-          {/* Input */}
           <div className="flex flex-shrink-0 flex-col gap-2 border-t border-[#D1D8BE] px-5 py-4">
             <p className="font-mono text-[9px] tracking-[0.15em] text-[#A7C1A8] uppercase">
               You — participant

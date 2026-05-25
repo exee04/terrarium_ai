@@ -12,14 +12,7 @@ export default function Nav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
-  if (loading) return null;
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setMenuOpen(false);
-    router.push("/login");
-  }
-  const navRef = useRef<HTMLDivElement>(null);
-
+  const navRef = useRef<HTMLDivElement>(null); // ← hooks first, always
   useEffect(() => {
     if (navRef.current) {
       document.documentElement.style.setProperty(
@@ -29,6 +22,12 @@ export default function Nav() {
     }
   }, [loading]);
 
+  if (loading) return null;
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setMenuOpen(false);
+    router.push("/login");
+  }
   return (
     <nav
       ref={navRef}
@@ -59,11 +58,7 @@ export default function Nav() {
                 <p className="font-mono text-xs tracking-widest uppercase">
                   {session.user.user_metadata.username}
                 </p>
-                {isAdmin && (
-                  <p className="text-accent-main font-mono text-xs tracking-widest uppercase">
-                    Admin
-                  </p>
-                )}
+                {isAdmin && <Link href="/admin">Admin →</Link>}
                 <div className="border-accent-soft border-t" />
                 <button
                   onClick={handleLogout}
