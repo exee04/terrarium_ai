@@ -3,24 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/app/providers";
+import { fetchPiStatus, type PiStatus } from "@/lib/pi_service";
+
 import {
   type Agent,
   getAgents,
   deleteAgent,
   resolveAvatar,
 } from "@/lib/agents";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface PiStatus {
-  temp_c: number | null;
-  uptime_sec: number | null;
-  rpd_remaining: number | null;
-  rpd_limit: number | null;
-  updated_at: string | null;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,14 +52,6 @@ function timeAgo(iso: string | null): string {
 // ---------------------------------------------------------------------------
 // Mock Pi data
 // ---------------------------------------------------------------------------
-
-const MOCK_PI: PiStatus = {
-  temp_c: 67.4,
-  uptime_sec: 14523,
-  rpd_remaining: 11840,
-  rpd_limit: 14400,
-  updated_at: new Date(Date.now() - 18000).toISOString(),
-};
 
 const MOCK_ACTIVE_USERS = 7;
 
@@ -412,18 +394,29 @@ function AgentRow({ agent }: { agent: Agent }) {
 // ---------------------------------------------------------------------------
 
 export default function AdminDashboard() {
-  const [pi] = useState<PiStatus>(MOCK_PI);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeUsers] = useState(MOCK_ACTIVE_USERS);
   const [mounted, setMounted] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
 
+  const [pi, setPi] = useState<PiStatus>({
+    temp_c: null,
+    uptime_sec: null,
+    rpd_remaining: null,
+    rpd_limit: null,
+    tokens_used_today: null,
+    updated_at: null,
+  });
   useEffect(() => {
     setMounted(true);
     fetchAgents();
   }, []);
-
+  useEffect(() => {
+    fetchPiStatus().then(setPi);
+    const iv = setInterval(() => fetchPiStatus().then(setPi), 30000);
+    return () => clearInterval(iv);
+  }, []);
   async function fetchAgents() {
     setLoadingAgents(true);
     setAgentsError(null);
@@ -524,9 +517,9 @@ export default function AdminDashboard() {
               sub="since last restart"
             />
             <StatCard
-              label="Active Users"
-              value={String(activeUsers)}
-              sub="in last 5 minutes"
+              label="Tokens Today"
+              value={pi.tokens_used_today?.toLocaleString() ?? "—"}
+              sub="resets at midnight"
             />
           </div>
           <RpdProgressBar remaining={pi.rpd_remaining} limit={pi.rpd_limit} />

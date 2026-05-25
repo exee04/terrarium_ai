@@ -27,14 +27,6 @@ import logging
 import sys
 import threading
 import time
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-7s  %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger("terrarium")
-
 # Import after logging is configured so module-level log calls work
 from config import ROOM_ID
 from agents import (
@@ -49,8 +41,46 @@ from messaging import (
 from room import start_agent_watcher
 from loop import main_loop, stop_event
 from config import TERMINAL_SENDER_ID
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("terrarium")
 
 
+
+def get_temp():
+    try:
+        out = subprocess.check_output(["vcgencmd", "measure_temp"]).decode()
+        return float(out.replace("temp=", "").replace("'C\n", ""))
+    except Exception as e:
+        log.warning("Could not read temp: %s", e)
+        return None
+
+def get_uptime():
+    try:
+        with open("/proc/uptime") as f:
+            return int(float(f.read().split()[0]))
+    except Exception as e:
+        log.warning("Could not read uptime: %s", e)
+        return None
+
+def pi_reporter_loop() -> None:
+    from config import supabase
+    while not stop_event.is_set():
+        try:
+            temp = get_temp()
+            uptime = get_uptime()
+            if temp is not None and uptime is not None:
+                supabase.rpc("update_pi_status", {
+                    "p_temp_c": temp,
+                    "p_uptime_sec": uptime,
+                }).execute()
+                log.info("Pi status reported: %.1f°C, uptime %ds", temp, uptime)
+        except Exception as e:
+            log.warning("Pi reporter error: %s", e)
+        stop_event.wait(30)  # respects shutdown instead of time.sleep
 # ---------------------------------------------------------------------------
 # Input loop (terminal / SSH)
 # ---------------------------------------------------------------------------
@@ -127,13 +157,14 @@ def main() -> None:
     log.info("Digital Terrarium v4.3 starting (room %s)", ROOM_ID)
 
     fresh = reload_agents()
-    if not fresh:                    # ← check return value, not imported name
+    if not fresh:
         log.error("No agents found for room %s — check room_agents table", ROOM_ID)
         sys.exit(1)
     load_agent_states(fresh)
     start_agent_watcher()
     start_human_inbox_listener()
     threading.Thread(target=heartbeat_loop, daemon=True, name="heartbeat").start()
+    threading.Thread(target=pi_reporter_loop, daemon=True, name="pi-reporter").start()  # ← add this
     sim_thread = threading.Thread(target=main_loop, daemon=True, name="sim-loop")
     sim_thread.start()
 
