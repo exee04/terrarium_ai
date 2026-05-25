@@ -126,7 +126,6 @@ function HumanAvatar({ name, size = 28 }: { name: string; size?: number }) {
 function AgentCard({
   agent,
   mood,
-  selected,
   onClick,
 }: {
   agent: Agent;
@@ -148,16 +147,14 @@ function AgentCard({
         border: "none",
         borderBottom: "1px solid #d1d8be",
         cursor: "pointer",
-        background: selected ? "#d1d8be" : "transparent",
+        background: "transparent",
         transition: "background 0.15s",
       }}
       onMouseEnter={(e) => {
-        if (!selected)
-          (e.currentTarget as HTMLElement).style.background = "#e0e5d0";
+        (e.currentTarget as HTMLElement).style.background = "#e0e5d0"; // removed !selected guard
       }}
       onMouseLeave={(e) => {
-        if (!selected)
-          (e.currentTarget as HTMLElement).style.background = "transparent";
+        (e.currentTarget as HTMLElement).style.background = "transparent"; // removed !selected guard
       }}
     >
       <div style={{ position: "relative", flexShrink: 0 }}>
@@ -364,6 +361,7 @@ function FeedBubble({
   profileNames: Record<string, string>;
   onReply: (msg: HabitatMessage) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const isHuman = msg.sender_type === "human";
   const isOwn = isHuman && msg.sender_id === userId;
   const agent = !isHuman ? agentMap[msg.sender_id] : null;
@@ -415,14 +413,13 @@ function FeedBubble({
 
   return (
     <div
-      onClick={() => onReply(msg)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
         gap: 10,
         alignItems: "flex-start",
-        cursor: "pointer",
       }}
-      title="click to reply"
     >
       {agent ? (
         <div style={{ flexShrink: 0, marginTop: 2 }}>
@@ -432,17 +429,56 @@ function FeedBubble({
         <HumanAvatar name={senderName} size={28} />
       )}
       <div style={{ maxWidth: "74%", minWidth: 0 }}>
-        <p
+        {/* name + reply button row */}
+        <div
           style={{
-            margin: "0 0 4px",
-            fontSize: 10,
-            color: "#819a91",
-            fontFamily: "Geist, Inter, sans-serif",
-            letterSpacing: "0.02em",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 4,
           }}
         >
-          {senderName} · {fmt(msg.created_at)}
-        </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 10,
+              color: "#819a91",
+              fontFamily: "Geist, Inter, sans-serif",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {senderName} · {fmt(msg.created_at)}
+          </p>
+          {hovered && (
+            <button
+              onClick={() => onReply(msg)}
+              title="reply"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#819a91",
+                fontSize: 11,
+                padding: "1px 5px",
+                borderRadius: 4,
+                fontFamily: "Geist, Inter, sans-serif",
+                letterSpacing: "0.04em",
+                lineHeight: 1,
+                transition: "color 0.15s, background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#2e3028";
+                (e.currentTarget as HTMLElement).style.background = "#e0e5d0";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#819a91";
+                (e.currentTarget as HTMLElement).style.background = "none";
+              }}
+            >
+              ↩ reply
+            </button>
+          )}
+        </div>
         <div
           className="feed-bubble"
           style={{
@@ -556,6 +592,11 @@ export default function HabitatPage() {
   // ── Reply ──────────────────────────────────────────────────────────────────
   const handleReply = useCallback(
     (msg: HabitatMessage) => {
+      if (replyTo?.id === msg.id) {
+        setReplyTo(null);
+        setInput((v) => v.replace(/^@\S+\s*/, ""));
+        return;
+      }
       setReplyTo(msg);
       const agent = agentMap[msg.sender_id];
       if (agent) {
@@ -568,7 +609,7 @@ export default function HabitatPage() {
       }
       inputRef.current?.focus();
     },
-    [agentMap],
+    [agentMap, replyTo],
   );
 
   // ── Input / mention autocomplete ───────────────────────────────────────────
@@ -576,7 +617,6 @@ export default function HabitatPage() {
     const val = e.target.value;
     setInput(val);
 
-    // detect @query anywhere in input, at cursor position
     const cursor = e.target.selectionStart ?? val.length;
     const textUpToCursor = val.slice(0, cursor);
     const mentionMatch = textUpToCursor.match(/@(\S*)$/);
@@ -586,7 +626,6 @@ export default function HabitatPage() {
       setMentionQuery(null);
     }
 
-    // clear reply if @mention prefix was removed
     if (replyTo) {
       const agent = agentMap[replyTo.sender_id];
       if (agent && !val.includes(`@${agent.name}`)) {
@@ -651,6 +690,7 @@ export default function HabitatPage() {
     }
     if (e.key === "Backspace" && input === "") setReplyTo(null);
   }
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
@@ -709,8 +749,7 @@ export default function HabitatPage() {
             </div>
 
             <div data-lenis-prevent style={{ flex: 1, overflowY: "auto" }}>
-              {" "}
-                {agents.length === 0 && !error && (
+              {agents.length === 0 && !error && (
                 <p
                   style={{
                     padding: "14px 16px",

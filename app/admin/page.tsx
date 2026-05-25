@@ -1,22 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/app/providers";
 import {
   type Agent,
-  type AgentFull,
   getAgents,
-  createAgent,
-  updateAgent,
   deleteAgent,
-  getAgentFull,
-  addAgentNickname,
-  removeAgentNickname,
-  addAgentKeyword,
-  removeAgentKeyword,
-  addAgentTrigger,
-  removeAgentTrigger,
   resolveAvatar,
 } from "@/lib/agents";
 
@@ -51,8 +41,8 @@ function formatTemp(c: number | null): string {
 
 function tempColor(c: number | null): string {
   if (c === null) return "#3d4035";
-  if (c >= 80) return "#ef4444";
-  if (c >= 70) return "#ca8a04";
+  if (c >= 80) return "#c0392b";
+  if (c >= 70) return "#b8860b";
   return "#3d4035";
 }
 
@@ -70,7 +60,7 @@ function timeAgo(iso: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Mock Pi data — replace with real Pi heartbeat later
+// Mock Pi data
 // ---------------------------------------------------------------------------
 
 const MOCK_PI: PiStatus = {
@@ -90,33 +80,33 @@ const MOCK_ACTIVE_USERS = 7;
 const S = {
   page: {
     minHeight: "100vh",
-    backgroundColor: "var(--color-bg-primary, #fafaf8)",
-    color: "#3d4035",
-    fontFamily: "inherit",
+    backgroundColor: "var(--color-bg-primary, #eeefe0)",
+    color: "#2a2d22",
   } as React.CSSProperties,
 
   header: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottom: "1px solid #D1D8BE",
+    borderBottom: "1px solid #b0b89a",
     padding: "24px 32px",
   } as React.CSSProperties,
 
   body: {
-    padding: "24px 32px",
+    padding: "32px",
     display: "flex",
     flexDirection: "column" as const,
-    gap: "32px",
+    gap: "40px",
   } as React.CSSProperties,
 
   sectionLabel: {
     fontFamily: "monospace",
-    fontSize: "9px",
-    letterSpacing: "0.2em",
+    fontSize: "11px",
+    letterSpacing: "0.18em",
     textTransform: "uppercase" as const,
-    color: "#c5c9b8",
+    color: "#5a5f50",
     marginBottom: "16px",
+    fontWeight: 600,
   } as React.CSSProperties,
 
   statGrid: {
@@ -126,55 +116,35 @@ const S = {
   } as React.CSSProperties,
 
   statCard: {
-    backgroundColor: "var(--color-bg-primary, #fafaf8)",
-    border: "1px solid #D1D8BE",
-    padding: "16px 20px",
+    backgroundColor: "#e4e6d5",
+    border: "1px solid #b0b89a",
+    padding: "20px 24px",
   } as React.CSSProperties,
 
   statLabel: {
     fontFamily: "monospace",
-    fontSize: "9px",
-    letterSpacing: "0.2em",
+    fontSize: "10px",
+    letterSpacing: "0.18em",
     textTransform: "uppercase" as const,
-    color: "#5a5f50",
-    marginBottom: "8px",
+    color: "#4a4f40",
+    marginBottom: "10px",
+    fontWeight: 600,
   } as React.CSSProperties,
 
   statValue: {
-    fontSize: "24px",
+    fontSize: "28px",
     fontWeight: 300,
     letterSpacing: "-0.025em",
-    color: "#3d4035",
+    color: "#2a2d22",
   } as React.CSSProperties,
 
   statSub: {
     fontFamily: "monospace",
-    fontSize: "9px",
-    letterSpacing: "0.2em",
+    fontSize: "10px",
+    letterSpacing: "0.12em",
     textTransform: "uppercase" as const,
-    color: "#c5c9b8",
-    marginTop: "4px",
-  } as React.CSSProperties,
-
-  inputStyle: {
-    width: "100%",
-    borderBottom: "1px solid #819A91",
-    background: "transparent",
-    padding: "12px 4px",
-    fontSize: "14px",
-    color: "#3d4035",
-    outline: "none",
-    boxSizing: "border-box" as const,
-  } as React.CSSProperties,
-
-  labelStyle: {
-    display: "block",
-    fontFamily: "monospace",
-    fontSize: "9px",
-    letterSpacing: "0.2em",
-    textTransform: "uppercase" as const,
-    color: "#5a5f50",
-    marginBottom: "8px",
+    color: "#6b7060",
+    marginTop: "6px",
   } as React.CSSProperties,
 } as const;
 
@@ -196,7 +166,7 @@ function StatCard({
   return (
     <div style={S.statCard}>
       <p style={S.statLabel}>{label}</p>
-      <p style={{ ...S.statValue, color: valueColor ?? "#3d4035" }}>{value}</p>
+      <p style={{ ...S.statValue, color: valueColor ?? "#2a2d22" }}>{value}</p>
       {sub && <p style={S.statSub}>{sub}</p>}
     </div>
   );
@@ -215,16 +185,16 @@ function RpdProgressBar({
 }) {
   const used = rpdPercent(remaining, limit);
   const free = 100 - used;
-  const barColor = used > 85 ? "#f87171" : used > 60 ? "#eab308" : "#819A91";
+  const barColor = used > 85 ? "#c0392b" : used > 60 ? "#b8860b" : "#819A91";
   const statusLabel =
     used > 85 ? "⚠ near limit" : used > 60 ? "moderate usage" : "healthy";
 
   return (
     <div
       style={{
-        backgroundColor: "var(--color-bg-primary, #fafaf8)",
-        border: "1px solid #D1D8BE",
-        padding: "16px 20px",
+        backgroundColor: "#e4e6d5",
+        border: "1px solid #b0b89a",
+        padding: "20px 24px",
         marginTop: "16px",
       }}
     >
@@ -232,11 +202,21 @@ function RpdProgressBar({
         style={{
           display: "flex",
           justifyContent: "space-between",
-          marginBottom: "12px",
+          alignItems: "center",
+          marginBottom: "14px",
         }}
       >
         <p style={S.statLabel}>Groq RPD</p>
-        <span style={{ ...S.statSub, marginBottom: 0, marginTop: 0 }}>
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: "10px",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "#6b7060",
+            fontWeight: 600,
+          }}
+        >
           {statusLabel}
         </span>
       </div>
@@ -245,17 +225,19 @@ function RpdProgressBar({
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
-          marginBottom: "12px",
+          marginBottom: "14px",
         }}
       >
         <p style={S.statValue}>
           {remaining?.toLocaleString() ?? "—"}
           <span
             style={{
-              ...S.statSub,
-              marginTop: 0,
-              marginLeft: "6px",
-              display: "inline",
+              fontFamily: "monospace",
+              fontSize: "10px",
+              color: "#6b7060",
+              marginLeft: "8px",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
             }}
           >
             remaining
@@ -265,7 +247,8 @@ function RpdProgressBar({
           style={{
             fontFamily: "monospace",
             fontSize: "12px",
-            color: "#5a5f50",
+            color: "#4a4f40",
+            fontWeight: 600,
           }}
         >
           {limit?.toLocaleString() ?? "—"} limit
@@ -274,10 +257,9 @@ function RpdProgressBar({
       <div
         style={{
           position: "relative",
-          height: "12px",
+          height: "10px",
           width: "100%",
-          backgroundColor: "#e8ece0",
-          borderRadius: "2px",
+          backgroundColor: "#cdd0be",
           overflow: "hidden",
         }}
       >
@@ -301,7 +283,7 @@ function RpdProgressBar({
               left: `${pct}%`,
               height: "100%",
               width: "1px",
-              backgroundColor: "rgba(255,255,255,0.4)",
+              backgroundColor: "rgba(255,255,255,0.5)",
             }}
           />
         ))}
@@ -321,142 +303,10 @@ function RpdProgressBar({
 }
 
 // ---------------------------------------------------------------------------
-// TagChips — reusable chip list with add/remove
+// AgentRow (read-only overview for dashboard)
 // ---------------------------------------------------------------------------
 
-function TagChips({
-  label,
-  items,
-  onAdd,
-  onRemove,
-  placeholder,
-}: {
-  label: string;
-  items: { id: string; value: string }[];
-  onAdd: (value: string) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
-  placeholder: string;
-}) {
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleAdd() {
-    const val = input.trim();
-    if (!val) return;
-    setLoading(true);
-    await onAdd(val);
-    setInput("");
-    setLoading(false);
-  }
-
-  return (
-    <div>
-      <label style={S.labelStyle}>{label}</label>
-      {/* Chip list */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "6px",
-          marginBottom: "8px",
-        }}
-      >
-        {items.length === 0 && (
-          <span
-            style={{
-              fontFamily: "monospace",
-              fontSize: "9px",
-              color: "#c5c9b8",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            none yet
-          </span>
-        )}
-        {items.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              backgroundColor: "#e8ece0",
-              padding: "4px 8px",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: "10px",
-                color: "#3d4035",
-              }}
-            >
-              {item.value}
-            </span>
-            <button
-              onClick={() => onRemove(item.id)}
-              style={{
-                fontFamily: "monospace",
-                fontSize: "9px",
-                color: "#c5c9b8",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                lineHeight: 1,
-                padding: 0,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-      {/* Add input */}
-      <div style={{ display: "flex", gap: "8px" }}>
-        <input
-          style={{ ...S.inputStyle, flex: 1 }}
-          placeholder={placeholder}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          disabled={loading}
-        />
-        <button
-          onClick={handleAdd}
-          disabled={loading || !input.trim()}
-          style={{
-            padding: "8px 16px",
-            fontFamily: "monospace",
-            fontSize: "9px",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: "white",
-            backgroundColor: loading ? "#c5c9b8" : "#819A91",
-            border: "none",
-            cursor: loading ? "default" : "pointer",
-          }}
-        >
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// AgentRow
-// ---------------------------------------------------------------------------
-
-function AgentRow({
-  agent,
-  onEdit,
-  onDelete,
-}: {
-  agent: Agent;
-  onEdit: (a: Agent) => void;
-  onDelete: (id: string) => void;
-}) {
+function AgentRow({ agent }: { agent: Agent }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -467,17 +317,16 @@ function AgentRow({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "16px 20px",
-        backgroundColor: hovered ? "#f3f4ee" : "transparent",
+        padding: "14px 20px",
+        backgroundColor: hovered ? "#d8dbc9" : "transparent",
         transition: "background-color 0.15s ease",
       }}
     >
-      {/* Left */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "16px",
+          gap: "14px",
           minWidth: 0,
         }}
       >
@@ -485,10 +334,10 @@ function AgentRow({
           src={resolveAvatar(agent)}
           alt={agent.name}
           style={{
-            width: "32px",
-            height: "32px",
+            width: "34px",
+            height: "34px",
             borderRadius: "50%",
-            border: "1px solid #D1D8BE",
+            border: "1px solid #b0b89a",
             flexShrink: 0,
             objectFit: "cover",
           }}
@@ -498,10 +347,11 @@ function AgentRow({
             <span
               style={{
                 fontFamily: "monospace",
-                fontSize: "12px",
-                letterSpacing: "0.1em",
+                fontSize: "13px",
+                letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                color: "#3d4035",
+                color: "#2a2d22",
+                fontWeight: 600,
               }}
             >
               {agent.name}
@@ -509,13 +359,14 @@ function AgentRow({
             {agent.vision_enabled && (
               <span
                 style={{
-                  border: "1px solid #A7C1A8",
+                  border: "1px solid #819A91",
                   padding: "2px 6px",
                   fontFamily: "monospace",
                   fontSize: "9px",
                   letterSpacing: "0.2em",
                   textTransform: "uppercase",
-                  color: "#819A91",
+                  color: "#4a6b5e",
+                  backgroundColor: "#d0e0d1",
                 }}
               >
                 vision
@@ -526,10 +377,9 @@ function AgentRow({
             <p
               style={{
                 fontFamily: "monospace",
-                fontSize: "9px",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                color: "#c5c9b8",
+                fontSize: "10px",
+                letterSpacing: "0.12em",
+                color: "#6b7060",
                 marginTop: "2px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -541,526 +391,36 @@ function AgentRow({
           )}
         </div>
       </div>
-
-      {/* Right */}
-      <div
+      <span
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "16px",
+          fontFamily: "monospace",
+          fontSize: "10px",
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "#6b7060",
           flexShrink: 0,
         }}
       >
-        <span
-          style={{
-            fontFamily: "monospace",
-            fontSize: "9px",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color: "#c5c9b8",
-          }}
-        >
-          {agent.model_id}
-        </span>
-        <button
-          onClick={() => onEdit(agent)}
-          style={{
-            fontFamily: "monospace",
-            fontSize: "9px",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color: "#5a5f50",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => onDelete(agent.id)}
-          style={{
-            fontFamily: "monospace",
-            fontSize: "9px",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color: "#c5c9b8",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Remove
-        </button>
-      </div>
+        {agent.model_id}
+      </span>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// AgentModal
-// ---------------------------------------------------------------------------
-
-function AgentModal({
-  agent,
-  onClose,
-  onSaved,
-}: {
-  agent: Agent | null; // null = new agent
-  onClose: () => void;
-  onSaved: () => void; // tells parent to re-fetch
-}) {
-  const { session } = useAuth();
-  const isNew = !agent?.id;
-
-  const [form, setForm] = useState({
-    name: agent?.name ?? "",
-    tag: agent?.tag ?? "",
-    personality: agent?.personality ?? "",
-    model_id: agent?.model_id ?? "llama-3.1-8b-instant",
-    vision_enabled: agent?.vision_enabled ?? false,
-  });
-
-  const [full, setFull] = useState<AgentFull | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Hydrate sub-lists when editing an existing agent
-  useEffect(() => {
-    if (!agent?.id) return;
-    setLoading(true);
-    getAgentFull(agent.id).then(({ data, error }) => {
-      if (error) setError(error);
-      else setFull(data);
-      setLoading(false);
-    });
-  }, [agent?.id]);
-
-  function setField(key: keyof typeof form, value: unknown) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  async function handleSave() {
-    if (!form.name.trim() || !form.personality.trim()) {
-      setError("Name and personality are required.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-
-    if (isNew) {
-      const { error } = await createAgent({
-        name: form.name.trim(),
-        tag: form.tag.trim() || null,
-        personality: form.personality.trim(),
-        model_id: form.model_id,
-        vision_enabled: form.vision_enabled,
-        created_by: session!.user.id,
-      });
-      if (error) {
-        setError(error);
-        setSaving(false);
-        return;
-      }
-    } else {
-      const { error } = await updateAgent({
-        agent_id: agent!.id,
-        name: form.name.trim(),
-        tag: form.tag.trim() || null,
-        personality: form.personality.trim(),
-        model_id: form.model_id,
-        vision_enabled: form.vision_enabled,
-      });
-      if (error) {
-        setError(error);
-        setSaving(false);
-        return;
-      }
-    }
-
-    setSaving(false);
-    onSaved();
-    onClose();
-  }
-
-  // Sub-list handlers — only available when editing an existing agent
-  async function handleAddNickname(value: string) {
-    if (!full) return;
-    const { data, error } = await addAgentNickname(full.id, value);
-    if (error) {
-      setError(error);
-      return;
-    }
-    if (data)
-      setFull((f) => (f ? { ...f, nicknames: [...f.nicknames, data] } : f));
-  }
-
-  async function handleRemoveNickname(id: string) {
-    const { error } = await removeAgentNickname(id);
-    if (error) {
-      setError(error);
-      return;
-    }
-    setFull((f) =>
-      f ? { ...f, nicknames: f.nicknames.filter((n) => n.id !== id) } : f,
-    );
-  }
-
-  async function handleAddKeyword(value: string) {
-    if (!full) return;
-    const { data, error } = await addAgentKeyword(full.id, value);
-    if (error) {
-      setError(error);
-      return;
-    }
-    if (data)
-      setFull((f) => (f ? { ...f, keywords: [...f.keywords, data] } : f));
-  }
-
-  async function handleRemoveKeyword(id: string) {
-    const { error } = await removeAgentKeyword(id);
-    if (error) {
-      setError(error);
-      return;
-    }
-    setFull((f) =>
-      f ? { ...f, keywords: f.keywords.filter((k) => k.id !== id) } : f,
-    );
-  }
-
-  async function handleAddTrigger(value: string) {
-    if (!full) return;
-    const { data, error } = await addAgentTrigger(full.id, value);
-    if (error) {
-      setError(error);
-      return;
-    }
-    if (data)
-      setFull((f) => (f ? { ...f, triggers: [...f.triggers, data] } : f));
-  }
-
-  async function handleRemoveTrigger(id: string) {
-    const { error } = await removeAgentTrigger(id);
-    if (error) {
-      setError(error);
-      return;
-    }
-    setFull((f) =>
-      f ? { ...f, triggers: f.triggers.filter((t) => t.id !== id) } : f,
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "rgba(61,64,53,0.4)",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div
-        style={{
-          backgroundColor: "var(--color-bg-primary, #fafaf8)",
-          margin: "0 16px",
-          maxHeight: "90vh",
-          width: "100%",
-          maxWidth: "512px",
-          overflowY: "auto",
-          border: "1px solid #D1D8BE",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #D1D8BE",
-            padding: "16px 20px",
-          }}
-        >
-          <p
-            style={{
-              fontFamily: "monospace",
-              fontSize: "12px",
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "#3d4035",
-            }}
-          >
-            {isNew ? "New Agent" : `Edit — ${agent?.name}`}
-          </p>
-          <button
-            onClick={onClose}
-            style={{
-              fontFamily: "monospace",
-              fontSize: "9px",
-              color: "#c5c9b8",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Form */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-            padding: "16px 20px",
-          }}
-        >
-          {error && (
-            <p
-              style={{
-                fontFamily: "monospace",
-                fontSize: "10px",
-                color: "#ef4444",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-              }}
-            >
-              ⚠ {error}
-            </p>
-          )}
-
-          <div>
-            <label style={S.labelStyle}>Name *</label>
-            <input
-              style={S.inputStyle}
-              placeholder="e.g. Gloop"
-              value={form.name}
-              onChange={(e) => setField("name", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={S.labelStyle}>Tag line</label>
-            <input
-              style={S.inputStyle}
-              placeholder="e.g. man-fish • seaweed addict"
-              value={form.tag}
-              onChange={(e) => setField("tag", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={S.labelStyle}>Personality prompt *</label>
-            <textarea
-              style={{ ...S.inputStyle, resize: "none" }}
-              rows={5}
-              placeholder="You are [Name]..."
-              value={form.personality}
-              onChange={(e) => setField("personality", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={S.labelStyle}>Model</label>
-            <select
-              style={S.inputStyle}
-              value={form.model_id}
-              onChange={(e) => setField("model_id", e.target.value)}
-            >
-              <option value="llama-3.1-8b-instant">
-                llama-3.1-8b-instant (text)
-              </option>
-              <option value="meta-llama/llama-4-scout-17b-16e-instruct">
-                llama-4-scout (vision)
-              </option>
-            </select>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              cursor: "pointer",
-            }}
-            onClick={() => setField("vision_enabled", !form.vision_enabled)}
-          >
-            <div
-              style={{
-                width: "32px",
-                height: "16px",
-                borderRadius: "9999px",
-                backgroundColor: form.vision_enabled ? "#819A91" : "#e8ece0",
-                display: "flex",
-                alignItems: "center",
-                transition: "background-color 0.2s",
-                padding: "2px",
-              }}
-            >
-              <div
-                style={{
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "50%",
-                  backgroundColor: "white",
-                  transform: form.vision_enabled
-                    ? "translateX(16px)"
-                    : "translateX(0)",
-                  transition: "transform 0.2s",
-                }}
-              />
-            </div>
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: "9px",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                color: "#5a5f50",
-              }}
-            >
-              Vision enabled
-            </span>
-          </div>
-
-          {/* Sub-lists — only shown when editing an existing agent */}
-          {!isNew && (
-            <>
-              <div
-                style={{ borderTop: "1px solid #D1D8BE", paddingTop: "16px" }}
-              >
-                {loading ? (
-                  <p
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: "9px",
-                      color: "#c5c9b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.1em",
-                    }}
-                  >
-                    Loading...
-                  </p>
-                ) : full ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "20px",
-                    }}
-                  >
-                    <TagChips
-                      label="Nicknames"
-                      items={full.nicknames.map((n) => ({
-                        id: n.id,
-                        value: n.nickname,
-                      }))}
-                      onAdd={handleAddNickname}
-                      onRemove={handleRemoveNickname}
-                      placeholder="e.g. gloopy"
-                    />
-                    <TagChips
-                      label="Interest Keywords"
-                      items={full.keywords.map((k) => ({
-                        id: k.id,
-                        value: k.keyword,
-                      }))}
-                      onAdd={handleAddKeyword}
-                      onRemove={handleRemoveKeyword}
-                      placeholder="e.g. seaweed"
-                    />
-                    <TagChips
-                      label="Trigger Phrases"
-                      items={full.triggers.map((t) => ({
-                        id: t.id,
-                        value: t.phrase,
-                      }))}
-                      onAdd={handleAddTrigger}
-                      onRemove={handleRemoveTrigger}
-                      placeholder="e.g. seaweed is gross"
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: "12px",
-            borderTop: "1px solid #D1D8BE",
-            padding: "16px 20px",
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              padding: "8px 16px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "#5a5f50",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              padding: "12px 24px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "white",
-              backgroundColor: saving ? "#c5c9b8" : "#819A91",
-              border: "none",
-              cursor: saving ? "default" : "pointer",
-            }}
-          >
-            {saving ? "Saving..." : isNew ? "Create Agent" : "Save Changes"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main dashboard
+// Main Dashboard
 // ---------------------------------------------------------------------------
 
 export default function AdminDashboard() {
-  const { session } = useAuth();
   const [pi] = useState<PiStatus>(MOCK_PI);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeUsers] = useState(MOCK_ACTIVE_USERS);
-  const [modal, setModal] = useState<Agent | null | false>(false);
-  // false = closed, null = new agent, Agent = edit agent
   const [mounted, setMounted] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  // Fetch agents on mount
-  useEffect(() => {
     fetchAgents();
   }, []);
 
@@ -1071,15 +431,6 @@ export default function AdminDashboard() {
     if (error) setAgentsError(error);
     else setAgents(data ?? []);
     setLoadingAgents(false);
-  }
-
-  async function handleDelete(id: string) {
-    const { error } = await deleteAgent(id);
-    if (error) {
-      alert(error);
-      return;
-    }
-    setAgents((prev) => prev.filter((a) => a.id !== id));
   }
 
   const piOnline = pi.updated_at
@@ -1093,10 +444,10 @@ export default function AdminDashboard() {
         <div>
           <h1
             style={{
-              fontSize: "36px",
+              fontSize: "38px",
               fontWeight: 300,
               letterSpacing: "-0.025em",
-              color: "#3d4035",
+              color: "#2a2d22",
               margin: 0,
             }}
           >
@@ -1108,26 +459,28 @@ export default function AdminDashboard() {
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            border: "1px solid #D1D8BE",
-            padding: "8px 16px",
+            border: "1px solid #b0b89a",
+            padding: "10px 18px",
+            backgroundColor: "#e4e6d5",
           }}
         >
           <span
             style={{
-              width: "6px",
-              height: "6px",
+              width: "8px",
+              height: "8px",
               borderRadius: "50%",
-              backgroundColor: piOnline ? "#819A91" : "#f87171",
+              backgroundColor: piOnline ? "#4a7c5f" : "#c0392b",
               display: "inline-block",
             }}
           />
           <span
             style={{
               fontFamily: "monospace",
-              fontSize: "9px",
-              letterSpacing: "0.2em",
+              fontSize: "11px",
+              letterSpacing: "0.15em",
               textTransform: "uppercase",
-              color: "#5a5f50",
+              color: "#3a3f30",
+              fontWeight: 600,
             }}
           >
             Pi {piOnline ? "online" : "offline"}
@@ -1136,10 +489,10 @@ export default function AdminDashboard() {
             <span
               style={{
                 fontFamily: "monospace",
-                fontSize: "9px",
-                letterSpacing: "0.2em",
+                fontSize: "10px",
+                letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: "#c5c9b8",
+                color: "#6b7060",
               }}
             >
               · {mounted ? timeAgo(pi.updated_at) : ""}
@@ -1150,7 +503,7 @@ export default function AdminDashboard() {
 
       {/* Body */}
       <div style={S.body}>
-        {/* System */}
+        {/* System Stats */}
         <section>
           <p style={S.sectionLabel}>System</p>
           <div style={S.statGrid}>
@@ -1179,7 +532,7 @@ export default function AdminDashboard() {
           <RpdProgressBar remaining={pi.rpd_remaining} limit={pi.rpd_limit} />
         </section>
 
-        {/* Agents */}
+        {/* Agents overview */}
         <section>
           <div
             style={{
@@ -1189,36 +542,39 @@ export default function AdminDashboard() {
               marginBottom: "16px",
             }}
           >
-            <p style={S.sectionLabel}>Agents ({agents.length})</p>
-            <button
-              onClick={() => setModal(null)}
+            <p style={{ ...S.sectionLabel, marginBottom: 0 }}>
+              Agents ({agents.length})
+            </p>
+            <Link
+              href="/admin/agents"
               style={{
-                padding: "12px 24px",
+                padding: "10px 20px",
                 fontFamily: "monospace",
-                fontSize: "12px",
-                letterSpacing: "0.1em",
+                fontSize: "11px",
+                letterSpacing: "0.12em",
                 textTransform: "uppercase",
                 color: "white",
                 backgroundColor: "#819A91",
-                border: "none",
-                cursor: "pointer",
+                textDecoration: "none",
+                display: "inline-block",
+                fontWeight: 600,
               }}
             >
-              + New Agent
-            </button>
+              Manage Agents →
+            </Link>
           </div>
 
-          <div style={{ border: "1px solid #D1D8BE" }}>
+          <div style={{ border: "1px solid #b0b89a" }}>
             {loadingAgents ? (
               <p
                 style={{
                   padding: "32px 20px",
                   textAlign: "center",
                   fontFamily: "monospace",
-                  fontSize: "9px",
-                  letterSpacing: "0.2em",
+                  fontSize: "11px",
+                  letterSpacing: "0.15em",
                   textTransform: "uppercase",
-                  color: "#c5c9b8",
+                  color: "#6b7060",
                 }}
               >
                 Loading...
@@ -1229,10 +585,10 @@ export default function AdminDashboard() {
                   padding: "32px 20px",
                   textAlign: "center",
                   fontFamily: "monospace",
-                  fontSize: "9px",
-                  letterSpacing: "0.2em",
+                  fontSize: "11px",
+                  letterSpacing: "0.15em",
                   textTransform: "uppercase",
-                  color: "#ef4444",
+                  color: "#c0392b",
                 }}
               >
                 ⚠ {agentsError}
@@ -1243,10 +599,10 @@ export default function AdminDashboard() {
                   padding: "32px 20px",
                   textAlign: "center",
                   fontFamily: "monospace",
-                  fontSize: "9px",
-                  letterSpacing: "0.2em",
+                  fontSize: "11px",
+                  letterSpacing: "0.15em",
                   textTransform: "uppercase",
-                  color: "#c5c9b8",
+                  color: "#6b7060",
                 }}
               >
                 No agents yet
@@ -1255,13 +611,9 @@ export default function AdminDashboard() {
               agents.map((agent, i) => (
                 <div
                   key={agent.id}
-                  style={{ borderTop: i === 0 ? "none" : "1px solid #D1D8BE" }}
+                  style={{ borderTop: i === 0 ? "none" : "1px solid #b0b89a" }}
                 >
-                  <AgentRow
-                    agent={agent}
-                    onEdit={(a) => setModal(a)}
-                    onDelete={handleDelete}
-                  />
+                  <AgentRow agent={agent} />
                 </div>
               ))
             )}
@@ -1279,24 +631,34 @@ export default function AdminDashboard() {
             }}
           >
             {[
-              { label: "View Rooms", href: "/rooms" },
+              { label: "Manage Agents", href: "/admin/agents" },
               { label: "Message History", href: "/admin/messages" },
+              { label: "View Rooms", href: "/rooms" },
               { label: "Back to Chat", href: "/" },
             ].map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 style={{
-                  border: "1px solid #D1D8BE",
-                  padding: "16px 20px",
+                  border: "1px solid #b0b89a",
+                  padding: "18px 20px",
                   fontFamily: "monospace",
                   fontSize: "12px",
                   letterSpacing: "0.1em",
                   textTransform: "uppercase",
-                  color: "#5a5f50",
+                  color: "#3a3f30",
                   textDecoration: "none",
                   display: "block",
+                  backgroundColor: "#e4e6d5",
+                  fontWeight: 600,
+                  transition: "background-color 0.15s",
                 }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#d8dbc9")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = "#e4e6d5")
+                }
               >
                 {link.label} →
               </Link>
@@ -1304,15 +666,6 @@ export default function AdminDashboard() {
           </div>
         </section>
       </div>
-
-      {/* Modal — false = closed, null = new, Agent = edit */}
-      {modal !== false && (
-        <AgentModal
-          agent={modal}
-          onClose={() => setModal(false)}
-          onSaved={fetchAgents}
-        />
-      )}
     </div>
   );
 }
