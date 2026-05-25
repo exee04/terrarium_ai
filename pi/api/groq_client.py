@@ -15,7 +15,23 @@ _HEADERS = {
 }
 
 # ── Token tracking ───────────────────────────────────────────────────────────
-
+def init_token_counter() -> None:
+    """Load today's token count from DB on startup so restarts don't reset it."""
+    global _tokens_today, _token_date
+    try:
+        result = supabase.rpc("get_pi_status").execute()
+        if result.data:
+            row = result.data[0]
+            db_date = row.get("tokens_reset_at")
+            db_tokens = row.get("tokens_used_today") or 0
+            today = date.today()
+            if db_date and str(db_date) == str(today):
+                with _token_lock:
+                    _tokens_today = db_tokens
+                    _token_date = today
+                log.info("Token counter seeded from DB: %d", db_tokens)
+    except Exception as e:
+        log.warning("Could not seed token counter: %s", e)
 _token_lock = threading.Lock()
 _tokens_today = 0
 _token_date = date.today()

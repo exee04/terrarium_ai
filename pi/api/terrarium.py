@@ -49,7 +49,7 @@ from messaging import (
 )
 from room import start_agent_watcher
 from loop import main_loop, stop_event
-
+import groq_client 
 
 
 def get_temp():
@@ -157,7 +157,7 @@ def input_loop() -> None:
 
 def main() -> None:
     log.info("Digital Terrarium v4.3 starting (room %s)", ROOM_ID)
-
+    groq_client.init_token_counter()
     fresh = reload_agents()
     if not fresh:
         log.error("No agents found for room %s — check room_agents table", ROOM_ID)
