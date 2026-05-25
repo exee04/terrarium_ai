@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { getAgents, resolveAvatar, type Agent } from "@/lib/agents";
+import Link from "next/link";
 import {
   fetchRecentMessages,
   fetchAgentStates,
   fetchProfileName,
+  fetchProfileNames,
   sendHumanMessage,
   subscribeToMessages,
   getCurrentUserId,
@@ -150,11 +152,11 @@ function AgentCard({
         background: "transparent",
         transition: "background 0.15s",
       }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "#e0e5d0"; // removed !selected guard
+      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.background = "#e0e5d0";
       }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.background = "transparent"; // removed !selected guard
+      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+        e.currentTarget.style.background = "transparent";
       }}
     >
       <div style={{ position: "relative", flexShrink: 0 }}>
@@ -321,11 +323,11 @@ function MentionDropdown({
             cursor: "pointer",
             textAlign: "left",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "#e0e5d0";
+          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+            e.currentTarget.style.background = "#e0e5d0";
           }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "none";
+          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+            e.currentTarget.style.background = "none";
           }}
         >
           <AgentAvatar agent={a} size={22} />
@@ -415,11 +417,7 @@ function FeedBubble({
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start",
-      }}
+      style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
     >
       {agent ? (
         <div style={{ flexShrink: 0, marginTop: 2 }}>
@@ -429,7 +427,6 @@ function FeedBubble({
         <HumanAvatar name={senderName} size={28} />
       )}
       <div style={{ maxWidth: "74%", minWidth: 0 }}>
-        {/* name + reply button row */}
         <div
           style={{
             display: "flex",
@@ -466,13 +463,13 @@ function FeedBubble({
                 lineHeight: 1,
                 transition: "color 0.15s, background 0.15s",
               }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#2e3028";
-                (e.currentTarget as HTMLElement).style.background = "#e0e5d0";
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+                e.currentTarget.style.color = "#2e3028";
+                e.currentTarget.style.background = "#e0e5d0";
               }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#819a91";
-                (e.currentTarget as HTMLElement).style.background = "none";
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+                e.currentTarget.style.color = "#819a91";
+                e.currentTarget.style.background = "none";
               }}
             >
               ↩ reply
@@ -520,7 +517,7 @@ export default function HabitatPage() {
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ── Auth ────────────────────────────────────────────────────────────────
   useEffect(() => {
     getCurrentUserId().then(async (id) => {
       setUserId(id);
@@ -531,7 +528,7 @@ export default function HabitatPage() {
     });
   }, []);
 
-  // ── Agents + moods ─────────────────────────────────────────────────────────
+  // ── Agents + moods ───────────────────────────────────────────────────────
   useEffect(() => {
     getAgents().then(({ data, error }) => {
       if (error || !data) {
@@ -552,12 +549,26 @@ export default function HabitatPage() {
     return () => clearInterval(iv);
   }, []);
 
-  // ── Messages ───────────────────────────────────────────────────────────────
+  // ── Messages ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!ROOM_ID) return;
-    fetchRecentMessages(ROOM_ID).then(({ data, error }) => {
-      if (error) setError(error);
-      else setMessages(data ?? []);
+    fetchRecentMessages(ROOM_ID).then(async ({ data, error }) => {
+      if (error) {
+        setError(error);
+        setLoading(false);
+        return;
+      }
+      const msgs = data ?? [];
+      setMessages(msgs);
+      const humanIds = [
+        ...new Set(
+          msgs.filter((m) => m.sender_type === "human").map((m) => m.sender_id),
+        ),
+      ];
+      if (humanIds.length > 0) {
+        const names = await fetchProfileNames(humanIds);
+        setProfileNames((prev) => ({ ...prev, ...names }));
+      }
       setLoading(false);
     });
   }, []);
@@ -589,7 +600,7 @@ export default function HabitatPage() {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [messages]);
 
-  // ── Reply ──────────────────────────────────────────────────────────────────
+  // ── Reply ─────────────────────────────────────────────────────────────────
   const handleReply = useCallback(
     (msg: HabitatMessage) => {
       if (replyTo?.id === msg.id) {
@@ -612,11 +623,10 @@ export default function HabitatPage() {
     [agentMap, replyTo],
   );
 
-  // ── Input / mention autocomplete ───────────────────────────────────────────
+  // ── Input / mention autocomplete ─────────────────────────────────────────
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     setInput(val);
-
     const cursor = e.target.selectionStart ?? val.length;
     const textUpToCursor = val.slice(0, cursor);
     const mentionMatch = textUpToCursor.match(/@(\S*)$/);
@@ -625,7 +635,6 @@ export default function HabitatPage() {
     } else {
       setMentionQuery(null);
     }
-
     if (replyTo) {
       const agent = agentMap[replyTo.sender_id];
       if (agent && !val.includes(`@${agent.name}`)) {
@@ -642,7 +651,6 @@ export default function HabitatPage() {
     const newVal = replaced + after;
     setInput(newVal);
     setMentionQuery(null);
-
     const agent = agents.find((a) => a.name === name);
     if (agent) {
       const lastMsg = [...messages]
@@ -653,7 +661,7 @@ export default function HabitatPage() {
     inputRef.current?.focus();
   }
 
-  // ── Send ───────────────────────────────────────────────────────────────────
+  // ── Send ──────────────────────────────────────────────────────────────────
   async function transmit() {
     const text = input.trim();
     if (!text || sending || !userId) return;
@@ -691,7 +699,7 @@ export default function HabitatPage() {
     if (e.key === "Backspace" && input === "") setReplyTo(null);
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -936,97 +944,144 @@ export default function HabitatPage() {
                 borderTop: "1px solid #d1d8be",
               }}
             >
-              {replyTo && (
-                <ReplyBar
-                  msg={replyTo}
-                  agentMap={agentMap}
-                  onClear={() => {
-                    setReplyTo(null);
-                    setInput((v) => v.replace(/^@\S+\s*/, ""));
-                  }}
-                />
-              )}
-              <div
-                style={{
-                  padding: "12px 16px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  position: "relative",
-                }}
-              >
-                <HumanAvatar name={myName} size={28} />
-                <div style={{ flex: 1, position: "relative" }}>
-                  <MentionDropdown
-                    agents={agents}
-                    query={mentionQuery ?? ""}
-                    onSelect={handleMentionSelect}
-                  />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={input}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKey}
-                    disabled={sending}
-                    placeholder={
-                      sending
-                        ? "transmitting…"
-                        : "speak into the habitat… (@Name to address)"
-                    }
+              {userId ? (
+                <>
+                  {replyTo && (
+                    <ReplyBar
+                      msg={replyTo}
+                      agentMap={agentMap}
+                      onClear={() => {
+                        setReplyTo(null);
+                        setInput((v) => v.replace(/^@\S+\s*/, ""));
+                      }}
+                    />
+                  )}
+                  <div
                     style={{
-                      width: "100%",
-                      border: "1px solid #d1d8be",
-                      borderRadius: 6,
-                      padding: "9px 13px",
-                      fontSize: 13,
-                      background: "#fafaf4",
-                      color: "#2e3028",
-                      fontFamily: "'Playfair Display', serif",
-                      transition: "border-color 0.2s",
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      position: "relative",
                     }}
-                  />
-                </div>
-                <button
-                  onClick={transmit}
-                  disabled={sending || !input.trim() || !userId}
+                  >
+                    <HumanAvatar name={myName} size={28} />
+                    <div style={{ flex: 1, position: "relative" }}>
+                      <MentionDropdown
+                        agents={agents}
+                        query={mentionQuery ?? ""}
+                        onSelect={handleMentionSelect}
+                      />
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={input}
+                        onChange={handleInputChange}
+                        onKeyDown={handleKey}
+                        disabled={sending}
+                        placeholder={
+                          sending
+                            ? "transmitting…"
+                            : "speak into the habitat… (@Name to address)"
+                        }
+                        style={{
+                          width: "100%",
+                          border: "1px solid #d1d8be",
+                          borderRadius: 6,
+                          padding: "9px 13px",
+                          fontSize: 13,
+                          background: "#fafaf4",
+                          color: "#2e3028",
+                          fontFamily: "'Playfair Display', serif",
+                          transition: "border-color 0.2s",
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={transmit}
+                      disabled={sending || !input.trim()}
+                      style={{
+                        padding: "9px 18px",
+                        fontSize: 11,
+                        fontFamily: "Geist, Inter, sans-serif",
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        borderRadius: 6,
+                        flexShrink: 0,
+                        background:
+                          sending || !input.trim() ? "#d1d8be" : "#819a91",
+                        color: sending || !input.trim() ? "#a7b09a" : "#eeefe0",
+                        border: "none",
+                        cursor:
+                          sending || !input.trim() ? "not-allowed" : "pointer",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={(
+                        e: React.MouseEvent<HTMLButtonElement>,
+                      ) => {
+                        if (!sending && input.trim())
+                          e.currentTarget.style.background = "#6b8880";
+                      }}
+                      onMouseLeave={(
+                        e: React.MouseEvent<HTMLButtonElement>,
+                      ) => {
+                        if (!sending && input.trim())
+                          e.currentTarget.style.background = "#819a91";
+                      }}
+                    >
+                      {sending ? "…" : "transmit"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* ── Login gate ── */
+                <div
                   style={{
-                    padding: "9px 18px",
-                    fontSize: 11,
-                    fontFamily: "Geist, Inter, sans-serif",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    borderRadius: 6,
-                    flexShrink: 0,
-                    background:
-                      sending || !input.trim() || !userId
-                        ? "#d1d8be"
-                        : "#819a91",
-                    color:
-                      sending || !input.trim() || !userId
-                        ? "#a7b09a"
-                        : "#eeefe0",
-                    border: "none",
-                    cursor:
-                      sending || !input.trim() || !userId
-                        ? "not-allowed"
-                        : "pointer",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!sending && input.trim() && userId)
-                      (e.currentTarget as HTMLElement).style.background =
-                        "#6b8880";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!sending && input.trim() && userId)
-                      (e.currentTarget as HTMLElement).style.background =
-                        "#819a91";
+                    padding: "14px 20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
                   }}
                 >
-                  {sending ? "…" : "transmit"}
-                </button>
-              </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      flex: 1,
+                      fontSize: 12,
+                      color: "#819a91",
+                      fontStyle: "italic",
+                      fontFamily: "Geist, Inter, sans-serif",
+                    }}
+                  >
+                    sign in to speak into the habitat
+                  </p>
+                  <Link
+                    href="/login"
+                    onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                      e.currentTarget.style.background = "#6b8880";
+                    }}
+                    onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                      e.currentTarget.style.background = "#819a91";
+                    }}
+                    style={{
+                      padding: "8px 18px",
+                      fontSize: 11,
+                      fontFamily: "Geist, Inter, sans-serif",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      borderRadius: 6,
+                      background: "#819a91",
+                      color: "#eeefe0",
+                      textDecoration: "none",
+                      flexShrink: 0,
+                      display: "inline-block",
+                      transition: "background 0.2s",
+                    }}
+                  >
+                    sign in
+                  </Link>
+                </div>
+              )}
             </div>
           </main>
         </div>

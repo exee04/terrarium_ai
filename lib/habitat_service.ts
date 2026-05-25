@@ -105,25 +105,39 @@ const _profileCache: Record<string, string> = {};
  */
 export async function fetchProfileName(userId: string): Promise<string> {
   if (_profileCache[userId]) return _profileCache[userId];
-
   try {
     const { data } = await supabase
       .from("profiles")
       .select("username")
       .eq("id", userId)
       .single();
-
-    const name = data?.username ?? userId;
+    const name = data?.username ?? "human"; // ← was: userId
     _profileCache[userId] = name;
     return name;
   } catch {
-    return userId;
+    return "human";
   }
 }
-
+export async function fetchProfileNames(
+  userIds: string[],
+): Promise<Record<string, string>> {
+  const uncached = userIds.filter((id) => !_profileCache[id]);
+  if (uncached.length > 0) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .in("id", uncached);
+    for (const row of data ?? []) {
+      _profileCache[row.id] = row.username ?? "human";
+    }
+  }
+  return Object.fromEntries(
+    userIds.map((id) => [id, _profileCache[id] ?? "human"]),
+  );
+}
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 export async function getCurrentUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  return data.session?.user.id ?? "00000000-0000-0000-0000-000000000000";
+  return data.session?.user.id ?? null; // must be null, not the fallback UUID
 }
