@@ -1,76 +1,32 @@
 """
-terrarium.py — Digital Terrarium v4.1
-Pi-side simulation loop.
+terrarium.py — Digital Terrarium v4.3
+Entry point. Wires up all modules and runs the input loop.
 
 Architecture:
-  - Agents loaded from Supabase (nicknames, keywords, triggers hydrated)
-  - Supabase realtime channel "agents-watch" → hot-reload on any agent change
-  - Human messages arrive via Supabase realtime channel "habitat:inbox"
-      * Web frontend INSERTs a row into `human_messages` table; Pi receives it
-        via realtime and injects it into the turn queue
-  - Agent messages pushed to:
-      * Redis pub/sub    (PUBLISH "habitat:feed" <json>)  — live frontend display
-      * Supabase insert  (messages table)                 — persistence
-  - LLM calls go to local FastAPI on the Pi  (POST http://127.0.0.1:8000/chat)
-    exactly as in local_sim.py
+  config.py       — env vars, constants, shared Supabase/Redis clients
+  agents.py       — agent registry, hot-reload, weights, @mention queue
+  state.py        — emotional state, facts, Supabase persistence
+  conversation.py — in-memory log, prompt builder, LLM call
+  messaging.py    — human message intake, push outward, heartbeat
+  room.py         — room config, timing, realtime agent watcher
+  loop.py         — main simulation loop
 
-Environment variables required (.env):
-  SUPABASE_URL
-  SUPABASE_SERVICE_ROLE_KEY   (service role — read agents, receive realtime, insert messages)
-  FASTAPI_BASE                (default: http://127.0.0.1:8000)
-  REDIS_URL                   (e.g. redis://localhost:6379 or Upstash URL)
-  HABITAT_ID                  (UUID of the habitat/room these agents belong to)
-
-Supabase tables expected:
-  agents            (id, name, tag, personality, model_id, vision_enabled, ...)
-  agent_nicknames   (agent_id, nickname)
-  agent_keywords    (agent_id, keyword)
-  agent_triggers    (agent_id, phrase)
-  human_messages    (id, habitat_id, sender_name, content, created_at)
-      → Web frontend INSERTs here; Pi listens via realtime INSERT events
-  messages          (id, habitat_id, sender_name, sender_type, content,
-                     state_patch, created_at)
-      → Pi INSERTs agent (and echoes human) messages here
-
-Redis keys:
-  habitat:feed      CHANNEL — Pi publishes every message, web subscribes
-
-Controls (stdin, same as v3.x):
-  @Name       → guaranteed reply next turn (exact canonical name)
+Controls (stdin / SSH):
+  @Name       → guaranteed reply next turn
   /states     → print all emotional states
   /state NAME → print one agent's state
-  /facts NAME → print one agent's known facts
-  /nicknames  → list all nicknames
-  /reload     → force agent reload from Supabase
+  /facts      → print all known facts
+  /facts NAME → print one agent's facts
+  /nicknames  → list agent nicknames
+  /reload     → force agent reload
   Ctrl+C      → graceful shutdown
 """
-
 from __future__ import annotations
 
-import json
 import logging
-import os
-import random
-import re
 import sys
 import threading
 import time
-from collections import deque
-from copy import deepcopy
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
-
-import httpx
-from dotenv import load_dotenv
-from supabase import create_client, Client
-import redis as redis_lib
-
-load_dotenv()
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +35,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("terrarium")
 
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Environment  (mirrors config.py)
 # ---------------------------------------------------------------------------
@@ -163,18 +120,20 @@ _STATE_SCHEMA = (
     '"opinions":{"<topic>":"<stance>"},'
     '"memory":"<one sentence|null>",'
     '"reason":"<REQUIRED>","learned_facts":["<fact>"]}'
+=======
+# Import after logging is configured so module-level log calls work
+from config import ROOM_ID
+from agents import (
+    reload_agents, AGENTS, AGENT_NAMES, agents_lock,
+    resolve_agent_by_name, boost_weights_for_message, enqueue_mentions,
+>>>>>>> 733fc01e1bca42ca628503daec6dfa5030686c03
 )
-
-SYSTEM_SUFFIX = (
-    f"\n\nMood options: {', '.join(MOOD_VOCAB)}"
-    f"\nRelation stances: {', '.join(RELATIONAL_VOCAB)}"
-    f"\nOpinion stances: {', '.join(OPINION_VOCAB)}"
-    "\n\nRespond in EXACTLY this format (2 lines):\n"
-    "REPLY: <your message>\n"
-    + _STATE_SCHEMA
-    + "\n\nSTATE rules: reason required. Only include keys that changed. "
-    "learned_facts = things others explicitly revealed. Empty patch = {}"
+from state import get_state, get_facts, load_agent_states
+from messaging import (
+    set_pending_human, insert_terminal_message,
+    start_human_inbox_listener, heartbeat_loop,
 )
+<<<<<<< HEAD
 
 # ---------------------------------------------------------------------------
 # Agent dataclass  (populated from Supabase)
@@ -1028,11 +987,18 @@ def main_loop() -> None:
 
 # ---------------------------------------------------------------------------
 # Stdin input loop  (local terminal commands — useful while SSHed into the Pi)
+=======
+from room import start_agent_watcher
+from loop import main_loop, stop_event
+from config import TERMINAL_SENDER_ID
+
+
+# ---------------------------------------------------------------------------
+# Input loop (terminal / SSH)
+>>>>>>> 733fc01e1bca42ca628503daec6dfa5030686c03
 # ---------------------------------------------------------------------------
 
 def input_loop() -> None:
-    global last_human_time
-
     while not stop_event.is_set():
         try:
             text = input()
@@ -1043,75 +1009,75 @@ def input_loop() -> None:
         if not text:
             continue
 
-        # ── Commands ──
+        # ── Commands ──────────────────────────────────────────────────────
         if text.lower() == "/states":
             with agents_lock:
                 names = list(AGENT_NAMES)
             for name in names:
                 s = get_state(name)
-                print(f"  {name}: mood={s['mood']} rels={s['relations']} mem={s['memory']}")
+                print(f"  {name}: mood={s['mood']}  rels={s['relations']}  mem={s['memory']}")
             continue
 
         if text.lower().startswith("/state "):
-            agent = resolve_agent_by_name(text[7:].strip())
-            if agent:
-                s = get_state(agent.name)
-                print(f"  {agent.name}: {s}")
-            else:
-                print("  Unknown agent")
-            continue
-
-        if text.lower().startswith("/facts "):
-            agent = resolve_agent_by_name(text[7:].strip())
-            if agent:
-                print(f"  {agent.name} facts:", get_facts(agent.name))
+            a = resolve_agent_by_name(text[7:].strip())
+            print(f"  {a.name}: {get_state(a.name)}" if a else "  Unknown agent")
             continue
 
         if text.lower() == "/facts":
             with agents_lock:
                 names = list(AGENT_NAMES)
             for name in names:
-                print(f"  {name}:", get_facts(name))
+                print(f"  {name}: {get_facts(name)}")
+            continue
+
+        if text.lower().startswith("/facts "):
+            a = resolve_agent_by_name(text[7:].strip())
+            if a:
+                print(f"  {a.name}: {get_facts(a.name)}")
             continue
 
         if text.lower() == "/nicknames":
             with agents_lock:
-                agents_snap = list(AGENTS)
-            for a in agents_snap:
+                snap = list(AGENTS)
+            for a in snap:
                 print(f"  {a.name}: @{a.name} → queue  |  boosts: {', '.join(a.nicknames)}")
             continue
 
         if text.lower() == "/reload":
-            log.info("Manual reload triggered")
-            reload_agents()
-            continue
+            fresh = reload_agents()
+            if fresh:
+                load_agent_states(fresh)
+            continue        # ← was missing, causing fallthrough to human message
 
-        # ── Local human message (terminal shortcut, mirrors Redis path) ──
-        last_human_time = time.time()
-        add_to_log("Human", "human", text)
-        push_human_echo("Human", text)
+
+        # ── Human message ─────────────────────────────────────────────────
+        # 1. Put in the mailbox so the main loop picks it up immediately
+        set_pending_human("Terminal", TERMINAL_SENDER_ID, text)
+        # 2. Write to Supabase for DB consistency
+        insert_terminal_message(text)
+        # 3. Boost weights now (main loop will also call this when it pops,
+        #    but doing it here makes @mention queueing instant)
         boost_weights_for_message(text)
         enqueue_mentions(text, allow_agent_source=None)
-        log.info("Human (terminal): %s", text)
+        log.info("Terminal human: %s", text)
+
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    log.info("Digital Terrarium v4.1 starting up")
+    log.info("Digital Terrarium v4.3 starting (room %s)", ROOM_ID)
 
-    # Initial agent load
-    reload_agents()
-    if not AGENTS:
-        log.error("No agents loaded from Supabase — check HABITAT_ID and DB contents")
+    fresh = reload_agents()
+    if not fresh:                    # ← check return value, not imported name
+        log.error("No agents found for room %s — check room_agents table", ROOM_ID)
         sys.exit(1)
+    load_agent_states(fresh)
 
-    # Start background services
-    _start_supabase_realtime()
-
-    _start_human_inbox_listener()
-
+    start_agent_watcher()
+    start_human_inbox_listener()
+    threading.Thread(target=heartbeat_loop, daemon=True, name="heartbeat").start()
     sim_thread = threading.Thread(target=main_loop, daemon=True, name="sim-loop")
     sim_thread.start()
 
