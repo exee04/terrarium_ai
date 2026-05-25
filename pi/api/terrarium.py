@@ -80,16 +80,34 @@ logging.basicConfig(
 log = logging.getLogger("terrarium")
 
 # ---------------------------------------------------------------------------
-# Environment
+# Environment  (mirrors config.py)
 # ---------------------------------------------------------------------------
 
-SUPABASE_URL      = os.environ["SUPABASE_URL"]
-SUPABASE_KEY      = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-REDIS_URL         = os.environ.get("REDIS_URL", "redis://localhost:6379")
-HABITAT_ID        = os.environ["HABITAT_ID"]
+GROQ_API_KEY         = os.getenv("GROQ_API_KEY")
+SUPABASE_URL         = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY    = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+REDIS_URL            = os.getenv("REDIS_URL", "redis://localhost:6379")
+HABITAT_ID           = os.environ["HABITAT_ID"]
 
-FASTAPI_BASE      = os.environ.get("FASTAPI_BASE", "http://127.0.0.1:8000")
-FASTAPI_TIMEOUT   = 120.0
+FASTAPI_BASE         = os.getenv("FASTAPI_BASE", "http://127.0.0.1:8000")
+FASTAPI_TIMEOUT      = 120.0
+
+if not GROQ_API_KEY:
+    raise RuntimeError("Missing GROQ_API_KEY in .env")
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env")
+if not SUPABASE_SERVICE_KEY:
+    raise RuntimeError("Missing SUPABASE_SERVICE_KEY in .env")
+
+# ---------------------------------------------------------------------------
+# Model routing  (mirrors config.py)
+# Text:   14,400 RPD  — llama-3.1-8b-instant
+# Vision:  1,000 RPD  — llama-4-scout (image_url content block)
+# ---------------------------------------------------------------------------
+
+GROQ_TEXT_MODEL   = "llama-3.1-8b-instant"
+GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ---------------------------------------------------------------------------
 # Simulation config  (mirror local_sim.py, tune freely)
@@ -189,7 +207,7 @@ agents_lock = threading.Lock()
 # Supabase + Redis clients  (module-level singletons)
 # ---------------------------------------------------------------------------
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 _redis = redis_lib.from_url(REDIS_URL, decode_responses=True)
 
@@ -302,7 +320,7 @@ def _start_supabase_realtime() -> None:
     from supabase import acreate_client
 
     async def _listen() -> None:
-        async_sb: AsyncClient = await acreate_client(SUPABASE_URL, SUPABASE_KEY)
+        async_sb: AsyncClient = await acreate_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
         def _on_change(payload: dict) -> None:
             log.info("Supabase realtime: agent change detected — scheduling reload")
@@ -826,7 +844,7 @@ def _start_human_inbox_listener() -> None:
     from supabase import acreate_client
 
     async def _listen() -> None:
-        async_sb: AsyncClient = await acreate_client(SUPABASE_URL, SUPABASE_KEY)
+        async_sb: AsyncClient = await acreate_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
         channel = async_sb.channel("human-inbox")
         channel.on_postgres_changes(
             event="INSERT",
