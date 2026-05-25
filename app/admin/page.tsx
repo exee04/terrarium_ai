@@ -154,22 +154,18 @@ function StatCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// RpdProgressBar
-// ---------------------------------------------------------------------------
-
-function RpdProgressBar({
-  remaining,
+function TokenProgressBar({
+  used,
   limit,
 }: {
-  remaining: number | null;
-  limit: number | null;
+  used: number | null;
+  limit: number;
 }) {
-  const used = rpdPercent(remaining, limit);
-  const free = 100 - used;
-  const barColor = used > 85 ? "#c0392b" : used > 60 ? "#b8860b" : "#819A91";
+  const pct = used ? Math.round((used / limit) * 100) : 0;
+  const free = 100 - pct;
+  const barColor = pct > 85 ? "#c0392b" : pct > 60 ? "#b8860b" : "#819A91";
   const statusLabel =
-    used > 85 ? "⚠ near limit" : used > 60 ? "moderate usage" : "healthy";
+    pct > 85 ? "⚠ near limit" : pct > 60 ? "moderate usage" : "healthy";
 
   return (
     <div
@@ -188,7 +184,7 @@ function RpdProgressBar({
           marginBottom: "14px",
         }}
       >
-        <p style={S.statLabel}>Groq RPD</p>
+        <p style={S.statLabel}>Tokens Today</p>
         <span
           style={{
             fontFamily: "monospace",
@@ -211,7 +207,7 @@ function RpdProgressBar({
         }}
       >
         <p style={S.statValue}>
-          {remaining?.toLocaleString() ?? "—"}
+          {used?.toLocaleString() ?? "—"}
           <span
             style={{
               fontFamily: "monospace",
@@ -222,7 +218,7 @@ function RpdProgressBar({
               textTransform: "uppercase",
             }}
           >
-            remaining
+            used
           </span>
         </p>
         <span
@@ -233,7 +229,7 @@ function RpdProgressBar({
             fontWeight: 600,
           }}
         >
-          {limit?.toLocaleString() ?? "—"} limit
+          {limit.toLocaleString()} daily limit
         </span>
       </div>
       <div
@@ -251,18 +247,18 @@ function RpdProgressBar({
             top: 0,
             left: 0,
             height: "100%",
-            width: `${used}%`,
+            width: `${pct}%`,
             backgroundColor: barColor,
             transition: "width 0.7s ease",
           }}
         />
-        {[25, 50, 75].map((pct) => (
+        {[25, 50, 75].map((p) => (
           <div
-            key={pct}
+            key={p}
             style={{
               position: "absolute",
               top: 0,
-              left: `${pct}%`,
+              left: `${p}%`,
               height: "100%",
               width: "1px",
               backgroundColor: "rgba(255,255,255,0.5)",
@@ -277,7 +273,7 @@ function RpdProgressBar({
           marginTop: "8px",
         }}
       >
-        <p style={S.statSub}>{used}% used</p>
+        <p style={S.statSub}>{pct}% used</p>
         <p style={S.statSub}>{free}% free</p>
       </div>
     </div>
@@ -522,7 +518,7 @@ export default function AdminDashboard() {
               sub="resets at midnight"
             />
           </div>
-          <RpdProgressBar remaining={pi.rpd_remaining} limit={pi.rpd_limit} />
+          <TokenProgressBar used={pi.tokens_used_today} limit={500000} />
         </section>
 
         {/* Agents overview */}

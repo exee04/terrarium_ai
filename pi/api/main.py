@@ -1,6 +1,9 @@
+from logging import log
+
 from fastapi import FastAPI, HTTPException
 import groq_client
 from api_models import ChatRequest, ChatResponse, HealthResponse
+import traceback
 
 app = FastAPI(title="Digital Terrarium — Pi Worker API", version="2.0.0")
 
@@ -35,4 +38,5 @@ async def chat(req: ChatRequest):
             agent_name=req.agent_name,
         )
     except Exception as e:
+        traceback.print_exc()  # ← add this
         raise HTTPException(status_code=500, detail=str(e))
