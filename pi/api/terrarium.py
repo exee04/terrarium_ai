@@ -27,6 +27,7 @@ import logging
 import sys
 import threading
 import time
+import subprocess
 # Import after logging is configured so module-level log calls work
 from config import ROOM_ID
 from agents import (
