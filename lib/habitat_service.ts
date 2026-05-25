@@ -106,12 +106,10 @@ const _profileCache: Record<string, string> = {};
 export async function fetchProfileName(userId: string): Promise<string> {
   if (_profileCache[userId]) return _profileCache[userId];
   try {
-    const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", userId)
-      .single();
-    const name = data?.username ?? "human"; // ← was: userId
+    const { data, error } = await supabase.rpc("get_username", {
+      user_id: userId,
+    });
+    const name = !error && data ? data : "human";
     _profileCache[userId] = name;
     return name;
   } catch {
@@ -123,13 +121,7 @@ export async function fetchProfileNames(
 ): Promise<Record<string, string>> {
   const uncached = userIds.filter((id) => !_profileCache[id]);
   if (uncached.length > 0) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username")
-      .in("id", uncached);
-    for (const row of data ?? []) {
-      _profileCache[row.id] = row.username ?? "human";
-    }
+    await Promise.all(uncached.map((id) => fetchProfileName(id)));
   }
   return Object.fromEntries(
     userIds.map((id) => [id, _profileCache[id] ?? "human"]),
