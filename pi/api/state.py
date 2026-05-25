@@ -135,7 +135,6 @@ def state_to_english(name: str, state: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def load_agent_states(agents: list) -> None:
-    """Pull persisted states from agent_state table on startup / reload."""
     ids = [a.id for a in agents]
     if not ids:
         return
@@ -151,7 +150,24 @@ def load_agent_states(agents: list) -> None:
         log.warning("load_agent_states failed: %s", exc)
         return
 
+    # ← add this here
+    for row in rows:
+        name = id_to_name.get(row["agent_id"])
+        state = row.get("state")
+        # parse if Supabase returns it as a string
+        if isinstance(state, str):
+            try:
+                state = json.loads(state)
+            except json.JSONDecodeError:
+                log.warning("Could not parse state for agent_id %s", row["agent_id"])
+                continue
+        if name and isinstance(state, dict):
+            with states_lock:
+                emotional_states[name] = state
+            log.debug("Loaded persisted state for %s", name)
     id_to_name = {a.id: a.name for a in agents}
+    log.info("agent_state rows fetched: %d", len(rows))
+
     for row in rows:
         name = id_to_name.get(row["agent_id"])
         if name and isinstance(row.get("state"), dict):

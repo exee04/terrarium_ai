@@ -131,7 +131,6 @@ def main() -> None:
         log.error("No agents found for room %s — check room_agents table", ROOM_ID)
         sys.exit(1)
     load_agent_states(fresh)
-
     start_agent_watcher()
     start_human_inbox_listener()
     threading.Thread(target=heartbeat_loop, daemon=True, name="heartbeat").start()
