@@ -16,9 +16,6 @@ async def health():
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """
-    Unified chat endpoint. Routes to vision model automatically if image_url is set.
-    """
     try:
         if req.image_url:
             content, model_used = await groq_client.vision(
@@ -31,6 +28,7 @@ async def chat(req: ChatRequest):
                 personality=req.personality,
                 messages=req.messages,
             )
+        log.info("Tokens today: %d", groq_client.get_tokens_today())
         return ChatResponse(
             content=content,
             model=model_used,

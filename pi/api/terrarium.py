@@ -26,10 +26,18 @@ from __future__ import annotations
 import logging
 import sys
 import threading
-import time
 import subprocess
-# Import after logging is configured so module-level log calls work
-from config import ROOM_ID
+
+# ── logging MUST be first ────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("terrarium")
+
+# ── now safe to import project modules ───────────────────────────────────────
+from config import ROOM_ID, TERMINAL_SENDER_ID, supabase
 from agents import (
     reload_agents, AGENTS, AGENT_NAMES, agents_lock,
     resolve_agent_by_name, boost_weights_for_message, enqueue_mentions,
@@ -41,13 +49,6 @@ from messaging import (
 )
 from room import start_agent_watcher
 from loop import main_loop, stop_event
-from config import TERMINAL_SENDER_ID
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-7s  %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger("terrarium")
 
 
 

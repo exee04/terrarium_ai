@@ -100,7 +100,9 @@ async def vision(
 
 
 # ── Health ───────────────────────────────────────────────────────────────────
-
+def get_tokens_today() -> int:
+    with _token_lock:
+        return _tokens_today
 async def is_reachable() -> bool:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
